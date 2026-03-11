@@ -114,7 +114,7 @@
 
     <div class="input-group">
         <label>M-Pesa Number</label>
-        <input type="text" id="phone" placeholder="2547XXXXXXXX" required>
+        <input type="text" id="phone" placeholder="" required>
     </div>
 
     <button id="payBtn" onclick="handlePayment()">Pay with M-Pesa</button>
@@ -194,7 +194,7 @@
                     clearInterval(pollTimer);
                     statusDiv.style.color = "green";
                     statusDiv.innerHTML = "<strong>✅ Payment Received!</strong><br>Redirecting...";
-                    setTimeout(() => { window.location.href = "vocher.html"; }, 2000);
+                    setTimeout(() => { window.location.href = "https://promt-puce.vercel.app"; }, 2000);
                 } else if (state === "FAILED" || state === "REJECTED") {
                     clearInterval(pollTimer);
                     statusDiv.style.color = "red";
