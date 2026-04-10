@@ -1,0 +1,258 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Payment Access</title>
+   
+    <!-- PWA Meta Tags -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0070ba">
+    <link rel="apple-touch-icon" href="logo.png">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    
+    <style>
+        :root {
+            --primary: #0070ba;
+            --success: #28a745;
+            --dark: #333;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background: #f0f2f5;
+        }
+        .card {
+            background: white;
+            padding: 2.5rem;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            width: 90%;
+            max-width: 350px;
+            text-align: center;
+        }
+        h2 { 
+            color: var(--dark); 
+            margin-bottom: 0.5rem; 
+            font-size: 1.2rem; 
+        }
+        p { 
+            color: #666; 
+            margin-bottom: 1.5rem; 
+            font-size: 0.95rem; 
+        }
+       
+        .price-tag {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: var(--primary);
+            margin-bottom: 1rem;
+            display: block;
+        }
+        .input-group {
+            text-align: left;
+            margin-bottom: 15px;
+        }
+        label {
+            font-size: 0.8rem;
+            font-weight: bold;
+            color: #555;
+            display: block;
+            margin-bottom: 5px;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            margin: 5px 0;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+        input:focus { 
+            border-color: var(--primary); 
+            outline: none; 
+        }
+       
+        button {
+            width: 100%;
+            padding: 12px;
+            background: var(--success);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        button:disabled { 
+            background: #ccc; 
+            cursor: not-allowed; 
+        }
+
+        /* New Prompt Button Style */
+        .prompt-btn {
+            background: #0070ba;
+            margin-top: 15px;
+        }
+        .prompt-btn:hover {
+            background: #005c99;
+        }
+
+        #status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            min-height: 20px;
+        }
+        .loader {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+        @keyframes spin { 
+            to { transform: rotate(360deg); } 
+        }
+    </style>
+</head>
+<body>
+<div class="card">
+    <h2>Secure Payment</h2>
+    <p>Enter details below to proceed.</p>
+   
+    <span class="price-tag" id="displayAmount">KES 0.00</span>
+   
+    <div class="input-group">
+        <label>Amount (KES)</label>
+        <input type="number" id="amount" placeholder="e.g. 34" oninput="updateDisplay()" required>
+    </div>
+    <div class="input-group">
+        <label>M-Pesa Number</label>
+        <input type="text" id="phone" placeholder="07XXXXXXXX" required>
+    </div>
+
+    <!-- Main Payment Button -->
+    <button id="payBtn" onclick="handlePayment()">Pay with M-Pesa</button>
+   
+    <!-- New Prompt Button -->
+    <button class="prompt-btn" onclick="openBankPage()">💳 Open Bank Prompt</button>
+   
+    <div id="status"></div>
+    <small style="color: #999; margin-top: 15px; display: block;">Do not refresh after entering PIN.</small>
+</div>
+
+<script>
+    const BACKEND_URL = "https://newpayment-byr6.vercel.app";
+    let pollTimer;
+
+    // PWA Service Worker Registration
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js')
+            .then(reg => console.log('SW Registered'))
+            .catch(err => console.log('SW Setup Failed', err));
+        });
+    }
+
+    function updateDisplay() {
+        const amt = document.getElementById('amount').value;
+        document.getElementById('displayAmount').innerText = amt ? `KES ${amt}` : "KES 0.00";
+    }
+
+    // New function to open bank.html
+    function openBankPage() {
+        window.location.href = "bank.html";
+    }
+
+    async function handlePayment() {
+        const phone = document.getElementById('phone').value.trim();
+        const amount = document.getElementById('amount').value;
+        const statusDiv = document.getElementById('status');
+        const payBtn = document.getElementById('payBtn');
+
+        if (!amount || amount <= 0) {
+            alert("Please enter a valid amount");
+            return;
+        }
+        if (!phone || phone.length < 10) {
+            alert("Please enter a valid phone number");
+            return;
+        }
+
+        payBtn.disabled = true;
+        payBtn.innerHTML = '<span class="loader"></span>Processing...';
+        statusDiv.style.color = "#555";
+        statusDiv.innerText = "Requesting M-Pesa prompt...";
+
+        try {
+            const response = await fetch(`${BACKEND_URL}/api/initiate`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ amount, phone_number: phone })
+            });
+
+            const data = await response.json();
+            const invoiceId = data.invoice ? data.invoice.invoice_id : (data.id || null);
+
+            if (invoiceId) {
+                statusDiv.innerText = "Check your phone and enter M-Pesa PIN.";
+                startPolling(invoiceId);
+            } else {
+                throw new Error(data.error || "Failed to initiate.");
+            }
+        } catch (err) {
+            statusDiv.style.color = "red";
+            statusDiv.innerText = "Error: " + err.message;
+            resetButton();
+        }
+    }
+
+    async function startPolling(invoiceId) {
+        const statusDiv = document.getElementById('status');
+        pollTimer = setInterval(async () => {
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/status/${invoiceId}`);
+                const data = await response.json();
+                const state = data.invoice ? data.invoice.state : data.state;
+
+                if (state === "COMPLETE" || state === "COMPLETED") {
+                    clearInterval(pollTimer);
+                    statusDiv.style.color = "green";
+                    statusDiv.innerHTML = "<strong>✅ Payment Received!</strong><br>Redirecting...";
+                    setTimeout(() => { 
+                        window.location.href = "https://promt-puce.vercel.app"; 
+                    }, 2000);
+                } else if (state === "FAILED" || state === "REJECTED") {
+                    clearInterval(pollTimer);
+                    statusDiv.style.color = "red";
+                    statusDiv.innerText = "❌ Payment failed/cancelled.";
+                    resetButton();
+                }
+            } catch (err) {
+                console.error("Polling error:", err);
+            }
+        }, 3000);
+    }
+
+    function resetButton() {
+        const payBtn = document.getElementById('payBtn');
+        payBtn.disabled = false;
+        payBtn.innerText = "Pay with M-Pesa";
+    }
+</script>
+</body>
+</htm
